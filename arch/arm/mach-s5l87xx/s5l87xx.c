@@ -11,83 +11,24 @@ typedef struct {
     uint32_t gates[10];
 } s5l87xx_clkcon;
 
-#define S5L87XX_CLKCON ((volatile s5l87xx_clkcon *)0x3C500000)
+#define S5L87XX_PWRCON(i)    (*((uint32_t volatile*)(0x3C500000 + ((i) == 1 ? 0x40 : 0x28))))
 
-typedef struct {
-    uint8_t gate;
-    uint8_t bit;
-} s5l87xx_clkgate_index; 
-
-typedef struct {
-    char *id;
-    s5l87xx_clkgate_index clkgate1;
-    // Some of the clockgate mappings have two clockgates. If so, this field will be non-zero.
-    s5l87xx_clkgate_index clkgate2;
-} s5l87xx_clkgate_mapping; 
-
-static const s5l87xx_clkgate_mapping *s5l87xx_clkgate_mappings[] = {
-    &(s5l87xx_clkgate_mapping) {
-        .id = "timer0", .clkgate1 = { 1, 5 }, .clkgate2 = { 9, 0 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "timer1", .clkgate1 = { 1, 23 }, .clkgate2 = { 9, 1 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "timer2", .clkgate1 = { 1, 24 }, .clkgate2 = { 9, 2 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "timer3", .clkgate1 = { 1, 25 }, .clkgate2 = { 9, 3 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "timer4", .clkgate1 = { 1, 26 }, .clkgate2 = { 9, 4 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "timer5", .clkgate1 = { 1, 27 }, .clkgate2 = { 9, 5 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "timer6", .clkgate1 = { 1, 28 }, .clkgate2 = { 9, 6 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "timer7", .clkgate1 = { 4, 5 }, .clkgate2 = { 9, 22 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "timer8", .clkgate1 = { 4, 6 }, .clkgate2 = { 9, 23 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "uart0", .clkgate1 = { 1, 9 }, .clkgate2 = { 9, 7 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "usb-otg", .clkgate1 = { 0, 2 },
-    },
-    &(s5l87xx_clkgate_mapping) {
-        .id = "usb2-phy", .clkgate1 = { 1, 3 },
-    },
-    NULL,
-};
-
-static void s5l87xx_enable_clkgate_bit(uint8_t gate, uint8_t bit) {
-    uint32_t mask = ~(((uint32_t) 1) << bit);
-    S5L87XX_CLKCON->gates[gate] &= mask;
+bool s5l87xx_clockgate_get_state(int gate)
+{
+    return !(S5L87XX_PWRCON(gate >> 5) & (1 << (gate & 0x1f)));
 }
 
-static void s5l87xx_enable_clkgate(const char *id) {
-    s5l87xx_clkgate_mapping const **mapping = s5l87xx_clkgate_mappings;
-    while (mapping != NULL) {
-        const s5l87xx_clkgate_mapping *m = *mapping;
-        if (strcmp(m->id, id) != 0) {
-            mapping++;
-            continue;
-        }
-
-        debug("s5l87xx: ungating %s\n", id);
-        s5l87xx_enable_clkgate_bit(m->clkgate1.gate, m->clkgate1.bit);
-        if ((m->clkgate2.gate != 0) && (m->clkgate2.bit != 0)) {
-            s5l87xx_enable_clkgate_bit(m->clkgate2.gate, m->clkgate2.bit);
-        }
-        return;
-    }
-    panic("s5l87xx_enable_clkgate: unknown id %s", id);
+void s5l87xx_clockgate_enable(int gate, bool enable)
+{
+    if (enable) S5L87XX_PWRCON(gate >> 5) &= ~(1 << (gate & 0x1f));
+    else S5L87XX_PWRCON(gate >> 5) |= 1 << (gate & 0x1f);
 }
+
+// TODO: enum with all? https://freemyipod.org/wiki/Nano2G_clock_gates
+#define CLOCKGATE_TIMER 4
+#define CLOCKGATE_UART 8
+#define CLOCKGATE_USB_PHY 14
+#define CLOCKGATE_USB_OTG (32 + 11)
 
 struct s5l87xx_uart {
     uint32_t ulcon;    // 0x00
@@ -144,7 +85,7 @@ struct s5l87xx_lcdcon {
     uint32_t write;  // 0x40
 };
 
-#define S5L87XX_LCDCON ((volatile struct s5l87xx_lcdcon *)0x38300000)
+#define S5L87XX_LCDCON ((volatile struct s5l87xx_lcdcon *)0x38600000)
 
 static void s5l87xx_lcdcon_read_byte(uint8_t *out) {
     udelay(100);
@@ -186,57 +127,14 @@ static void s5l87xx_lcdcon_transact_read(uint32_t cmd, uint32_t len, uint8_t *ou
         out++;
     }
 }
-
-enum s5l87xx_lcd_type {
-    S5L87XX_LCD_TYPE_UNSUPPORTED = 0,
-    S5L87XX_LCD_TYPE_48C4 = 1,
-    S5L87XX_LCD_TYPE_38B3 = 2,
-    S5L87XX_LCD_TYPE_38F7 = 4
-};
-
-static enum s5l87xx_lcd_type s5l87xx_lcdcon_get_type(void) {
-    uint8_t id[3] = {0};
-    s5l87xx_lcdcon_transact_read(4, 3, id);
-    if (id[0] == 0x48 && id[1] == 0xc4) {
-        return S5L87XX_LCD_TYPE_48C4;
-    }
-    if (id[0] == 0x38) {
-        if (id[1] == 0xb3) {
-            return S5L87XX_LCD_TYPE_38B3;
-        }
-        if (id[1] == 0xf7) {
-            return S5L87XX_LCD_TYPE_38F7;
-        }
-    }
-    return S5L87XX_LCD_TYPE_UNSUPPORTED;
-}
-
-void s5l87xx_lcd_init(void) {
-    enum s5l87xx_lcd_type type = s5l87xx_lcdcon_get_type();
-    const char* types = "UNKNOWN";
-    switch (type) {
-    case S5L87XX_LCD_TYPE_48C4:
-        types = "48c4";
-    case S5L87XX_LCD_TYPE_38B3:
-        types = "38b3";
-    case S5L87XX_LCD_TYPE_38F7:
-        types = "38f7";
-    }
-    debug("%s: detected LCD type %s (%d)\n", __func__, types, type);
-}
-
-enum s5l87xx_buscon_remap {
-    S5L87XX_BUSCON_REMAP_ENABLE = 1,
-    S5L87XX_BUSCON_REMAP_SRAM = 2,
-};
-
-static void s5l87xx_buscon_remap_sdram(void) {
-    debug("s5l87xx_buscon_remap_sdram\n");
-    volatile struct s5l87xx_buscon *buscon = (struct s5l87xx_buscon *)0x3E000000;
-    buscon->remap = S5L87XX_BUSCON_REMAP_ENABLE;
-}
+#define PHYBASE 0x3C400000
 
 static void s5l87xx_otgphy_off(void) {
+    *((volatile uint32_t*)(PHYBASE + 0x00)) = 0xf;  /* PHY: Power down */
+    udelay(10);
+    *((volatile uint32_t*)(PHYBASE + 0x08)) = 7;  /* PHY: Assert Software Reset */
+    udelay(10);
+#if 0
     debug("s5l87xx_otgphy: turning off\n");
     volatile struct s5l87xx_otgphy *otgphy = (struct s5l87xx_otgphy *)0x3c400000;
     otgphy->pwr = 0xff;
@@ -244,17 +142,27 @@ static void s5l87xx_otgphy_off(void) {
     otgphy->rstcon = 0xff;
     mdelay(10);
     otgphy->unkcon = 4;
+#endif
 }
 
 static void s5l87xx_otgphy_on(void) {
-    // TODO(q3k): lmao
-    s5l87xx_lcd_init();
-
     debug("s5l87xx_otgphy: turning on\n");
-    s5l87xx_enable_clkgate("usb-otg");
-    s5l87xx_enable_clkgate("usb2-phy");
+    s5l87xx_clockgate_enable(CLOCKGATE_USB_OTG, true);
+    s5l87xx_clockgate_enable(CLOCKGATE_USB_PHY, true);
     mdelay(10);
 
+    *((volatile uint32_t*)(PHYBASE + 0x00)) = 0;  /* PHY: Power up */
+    udelay(10);
+    *((volatile uint32_t*)(PHYBASE + 0x1c)) = 1;
+    *((volatile uint32_t*)(PHYBASE + 0x44)) = 0xe3f;
+    *((volatile uint32_t*)(PHYBASE + 0x08)) = 1;  /* PHY: Assert Software Reset */
+    udelay(10);
+    *((volatile uint32_t*)(PHYBASE + 0x08)) = 0;  /* PHY: Deassert Software Reset */
+    udelay(10);
+    *((volatile uint32_t*)(PHYBASE + 0x18)) = 0x600;
+    *((volatile uint32_t*)(PHYBASE + 0x04)) = 0;
+    udelay(400);
+#if 0
     volatile struct s5l87xx_otgphy *otgphy = (struct s5l87xx_otgphy *)0x3c400000;
     otgphy->pwr = 0;
     mdelay(10);
@@ -265,6 +173,7 @@ static void s5l87xx_otgphy_on(void) {
     otgphy->unkcon = 6;
     otgphy->con = 1;
     mdelay(400);
+#endif
 }
 
 void otg_phy_init(void *unused) {
@@ -281,13 +190,6 @@ enum s5l87xx_timer_id {
     S5L87XX_TIMER_B = 1,
     S5L87XX_TIMER_C = 2,
     S5L87XX_TIMER_D = 3,
-    // Timer E: 64-bit (unimplemented, different registers from others)
-    S5L87XX_TIMER_E = 4,
-    // Timers F, G, H, I: 32-bit
-    S5L87XX_TIMER_F = 5,
-    S5L87XX_TIMER_G = 6,
-    S5L87XX_TIMER_H = 7,
-    S5L87XX_TIMER_I = 8,
 };
 
 enum s5l87xx_timer_cmd {
@@ -306,56 +208,26 @@ static struct s5l87xx_timer *s5l87xx_timer_registers(enum s5l87xx_timer_id id) {
         return (struct s5l87xx_timer *)0x3c700040;
     case S5L87XX_TIMER_D:
         return (struct s5l87xx_timer *)0x3c700060;
-    case S5L87XX_TIMER_E:
-        return (struct s5l87xx_timer *)0x3c700080;
-    case S5L87XX_TIMER_F:
-        return (struct s5l87xx_timer *)0x3c7000a0;
-    case S5L87XX_TIMER_G:
-        return (struct s5l87xx_timer *)0x3c7000c0;
-    case S5L87XX_TIMER_H:
-        return (struct s5l87xx_timer *)0x3c7000e0;
-    case S5L87XX_TIMER_I:
-        return (struct s5l87xx_timer *)0x3c700100;
     default:
         panic("requested invalid timer id %d", id);
     }
 }
 
-static const char* s5l87xx_timer_clockgate(enum s5l87xx_timer_id id) {
-    switch (id) {
-    case S5L87XX_TIMER_A:
-        return "timer0";
-    case S5L87XX_TIMER_B:
-        return "timer1";
-    case S5L87XX_TIMER_C:
-        return "timer2";
-    case S5L87XX_TIMER_D:
-        return "timer3";
-    case S5L87XX_TIMER_E:
-        return "timer4";
-    case S5L87XX_TIMER_F:
-        return "timer5";
-    case S5L87XX_TIMER_G:
-        return "timer6";
-    case S5L87XX_TIMER_H:
-        return "timer7";
-    case S5L87XX_TIMER_I:
-        return "timer8";
-    default:
-        panic("requested invalid timer id %d", id);
-    }
+static int s5l87xx_timer_clockgate(enum s5l87xx_timer_id id) {
+    return CLOCKGATE_TIMER;
 }
 
 static void s5l87xx_timer_configure_interval(enum s5l87xx_timer_id id) {
     debug("s5l87xx_timer: configuring %d in interval mode\n", id);
-    s5l87xx_enable_clkgate(s5l87xx_timer_clockgate(id));
+    s5l87xx_clockgate_enable(s5l87xx_timer_clockgate(id), true);
 
     volatile struct s5l87xx_timer *timer = s5l87xx_timer_registers(id);
-
+    /* configure timer for 100 kHz??? */
     timer->cmd = S5L87XX_TIMER_CMD_STOP;
-    timer->con = 0x40;
-    timer->pre = 0xb;
-    timer->data0 = 0xffffffff;
+    timer->con = (2 << 8) | (1 << 4);
+    timer->pre = 29;
+    timer->data0 = 0xffff;
+    timer->data1 = 0xffff;
     timer->cmd = S5L87XX_TIMER_CMD_CLR;
 }
 
@@ -378,52 +250,43 @@ static uint32_t s5l87xx_timer_read(enum s5l87xx_timer_id id) {
 
 int timer_init(void)
 {
-    s5l87xx_timer_configure_interval(S5L87XX_TIMER_F);
-    s5l87xx_timer_start(S5L87XX_TIMER_F);
+    s5l87xx_timer_configure_interval(S5L87XX_TIMER_C);
+    s5l87xx_timer_start(S5L87XX_TIMER_C);
 
     return 0;
 }
 
 unsigned long timer_read_counter(void)
 {
-    return s5l87xx_timer_read(S5L87XX_TIMER_F);
+    static uint16_t last = 0;
+    static uint16_t high = 0;
+    uint16_t now = s5l87xx_timer_read(S5L87XX_TIMER_C);
+    if (last > now) {
+        high++;
+    }
+    last = now;
+    return ((uint32_t)high << 16) | (uint32_t)now;
 }
 
 // TODO(q3k): move board early init to board
 int board_early_init_f(void)
 {
     debug("board_early_init_f\n");
-    // HACKHACKHACK add a pmctrl to linux
-    // needed for timer c0..???
-    s5l87xx_enable_clkgate("timer3");
-    // HACKHACKHACK
 
-    // Disable all VIC interrupts.
-    // TODO(q3k): disable VIC elsewhere
-    static volatile uint32_t *vic0_enclr = (uint32_t *)0x38e00014;
-    static volatile uint32_t *vic1_enclr = (uint32_t *)0x38e01014;
-    *vic0_enclr = 0xffffffff;
-    *vic1_enclr = 0xffffffff;
-
-    s5l87xx_enable_clkgate("usb-otg");
-    s5l87xx_enable_clkgate("usb2-phy");
+    s5l87xx_clockgate_enable(CLOCKGATE_USB_OTG, true);
+    s5l87xx_clockgate_enable(CLOCKGATE_USB_PHY, true);
 
     // Disable USB suspend. TODO(q3k): move this to DWC2?
-    volatile uint32_t *pcgcctl = (uint32_t *)0x38400e00;
+    volatile uint32_t *pcgcctl = (uint32_t *)0x38800e00;
     *pcgcctl = 0;
+
     return 0;
 }
-
 
 #ifdef CONFIG_DEBUG_UART_BOARD_INIT
 void board_debug_uart_init(void)
 {
-    s5l87xx_enable_clkgate("uart0");
-
-    // Enable GPIO pins on N5G.
-    static volatile uint32_t *gpio = (uint32_t *)0x3cf00000;
-    *gpio &= 0xff00ffff;
-    *gpio |= 0x00220000;
+    s5l87xx_clockgate_enable(CLOCKGATE_UART, true);
 }
 
 #endif

@@ -193,6 +193,10 @@ static void udc_reinit(struct dwc2_udc *dev)
 
 	debug_cond(DEBUG_SETUP != 0, "%s: %p\n", __func__, dev);
 
+#define INTMSK (*((uint32_t volatile*)(0x39C00008)))
+#define IRQ_USB_FUNC 16
+    INTMSK |= 1 << IRQ_USB_FUNC;
+
 	/* device/ep0 records init */
 	INIT_LIST_HEAD(&dev->gadget.ep_list);
 	INIT_LIST_HEAD(&dev->gadget.ep0->ep_list);
@@ -1070,6 +1074,18 @@ static void dwc2_set_applenano5g_hsotg_params(struct dwc2_plat_otg_data *p)
 		| 1<<3;	/* phy i/f  0:8bit, 1:16bit*/
 		//| 0x7 << 0;	/* FS timeout calibration**/
 }
+static void dwc2_set_applenano2g_hsotg_params(struct dwc2_plat_otg_data *p)
+{
+	p->activate_stm_id_vb_detection = true;
+	p->usb_gusbcfg =
+		0 << 15		/* PHY Low Power Clock sel*/
+		| 0x5 << 10	/* USB Turnaround time (5) */
+		| 1 << 9	/* [1:HNP enable]*/
+		| 1 << 8	/* [1:SRP enable]*/
+		| 0 << 6	/* 0: high speed utmi+, 1: full speed serial*/
+		| 1<<3;	/* phy i/f  0:8bit, 1:16bit*/
+		//| 0x7 << 0;	/* FS timeout calibration**/
+}
 
 static int dwc2_udc_otg_reset_init(struct udevice *dev,
 				   struct reset_ctl_bulk *resets)
@@ -1211,6 +1227,8 @@ static const struct udevice_id dwc2_udc_otg_ids[] = {
 	  .data = (ulong)dwc2_set_stm32mp1_hsotg_params },
 	{ .compatible = "apple,ipodnano5g-usb",
 	  .data = (ulong)dwc2_set_applenano5g_hsotg_params },
+	{ .compatible = "apple,ipodnano2g-usb",
+	  .data = (ulong)dwc2_set_applenano2g_hsotg_params },
 	{},
 };
 
@@ -1234,3 +1252,4 @@ int dwc2_udc_B_session_valid(struct udevice *dev)
 	return readl(&usbotg_reg->gotgctl) & B_SESSION_VALID;
 }
 #endif /* CONFIG_IS_ENABLED(DM_USB_GADGET) */
+

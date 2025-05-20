@@ -4,7 +4,7 @@
 
 int print_cpuinfo(void)
 {
-    printf("CPU: Samsung/Apple S5L8730\n");
+    printf("CPU: Samsung/Apple S5L8701\n");
     return 0;
 }
 

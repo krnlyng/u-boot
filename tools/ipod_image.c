@@ -2,23 +2,12 @@
 #include  "mkimage.h"
 #include <image.h>
 
-struct image1_header {
-    char magic[4]; // 0x00
-    char version[3]; // 0x04
-    uint8_t format; // 0x07
-    uint32_t entrypoint; // 0x08
-    uint32_t body_len; // 0x0c 
-    uint32_t data_len; // 0x10
-    uint32_t footer_cert_offset; // 0x14
-    uint32_t footer_cert_len; // 0x18
-    uint8_t salt[32]; // 0x1c
-    uint16_t unk1; // 0x3c
-    uint16_t unk2; // 0x3e
-    uint8_t header_signature[16]; // 0x40
-    uint8_t padding[0x600 - 0x50]; // 0x50
+struct ipod_header {
+    char checksum[4];
+    char magic[4];
 };
 
-static struct image1_header ipodimage_header;
+static struct ipod_header ipodimage_header;
 
 static int ipodimage_check_params(struct image_tool_params *params)
 {
@@ -31,46 +20,44 @@ static int ipodimage_check_params(struct image_tool_params *params)
 static int ipodimage_verify_header(unsigned char *ptr, int image_size,
         struct image_tool_params *params)
 {
-    struct image1_header *hdr = (struct image1_header *)ptr;
-
-    if (image_size < sizeof(struct image1_header))
+    if (image_size < sizeof(struct ipod_header))
         return -1;
 
-    if (memcmp(hdr->magic, "8730", 4) != 0)
-        return -1;
-
-    if (memcmp(hdr->version, "2.0", 3) != 0)
-        return -1;
-
-    switch (hdr->format) {
-    case 2: // SIGNED
-    case 4: // X509_SIGNED
-        break;
-    default:
-        return -1;
+    int i;
+    uint8_t* data = (uint8_t*)ptr;
+    uint32_t checksum = data[3] | (data[2] << 8) | (data[1] << 16) | (data[0] << 24);
+    uint32_t platform = 0x67326e6e;  // nn2g
+    checksum -= 62;
+    if (*((uint32_t*)&data[4]) != platform) return -2;
+    for (i = 0; i < image_size - 8; i++)
+    {
+        checksum -= data[i + 8];
     }
-    
+    if (checksum) return -1;
     return 0;
 }
 
 static void ipodimage_print_header(const void *ptr)
 {
-    struct image1_header *hdr = (struct image1_header *)ptr;
-    printf("Image Type    : Apple/Samsung S5L IMG1\n");
+    struct ipod_header *hdr = (struct ipod_header *)ptr;
+    printf("Image Type    : Apple/Samsung S5L ipod image\n");
 }
 
 static void ipodimage_set_header(void *ptr, struct stat *sbuf, int ifd,
         struct image_tool_params *params)
 {
-    struct image1_header *hdr = (struct image1_header *)ptr;
-    memcpy(hdr->magic, "8730", 4);
-    memcpy(hdr->version, "2.0", 3);
-    hdr->format = 4;
-    hdr->entrypoint = 0;
-    hdr->body_len = cpu_to_le32((uint32_t)sbuf->st_size);
-    hdr->data_len = cpu_to_le32((uint32_t)sbuf->st_size + 0x80 + 0x300);
-    hdr->footer_cert_offset = cpu_to_le32((uint32_t)sbuf->st_size + 0x80);
-    hdr->footer_cert_len = cpu_to_le32(0x300);
+    struct ipod_header *hdr = (struct ipod_header *)ptr;
+    uint32_t platform = 0x67326e6e;  // nn2g
+    memcpy(&hdr->magic, &platform, 4);
+
+    uint32_t checksum = 62;
+    uint8_t* data = (uint8_t*)ptr;
+    for (int i = 0; i < sbuf->st_size - 8; i++)
+    {
+        checksum += data[i + 8];
+    }
+    checksum = cpu_to_be32(checksum);
+    memcpy(&hdr->checksum, &checksum, 4);
 }
 
 static int ipodimage_check_image_types(uint8_t type)
@@ -82,8 +69,8 @@ static int ipodimage_check_image_types(uint8_t type)
 
 U_BOOT_IMAGE_TYPE(
     ipodimage,
-    "Apple iPod Image1 support",
-    sizeof(struct image1_header),
+    "ipod image support",
+    sizeof(struct ipod_header),
     (void *)&ipodimage_header,
     ipodimage_check_params,
     ipodimage_verify_header,

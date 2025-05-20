@@ -7,11 +7,15 @@ choice
 config TARGET_NANO5G
     bool "Apple iPod Nano 5G"
 
+config TARGET_NANO2G
+    bool "Apple iPod Nano 2G"
+
 endchoice
 
 config SYS_SOC
     default "s5l87xx"
 
 source "board/apple/nano5g/Kconfig"
+source "board/apple/nano2g/Kconfig"
 
 endif

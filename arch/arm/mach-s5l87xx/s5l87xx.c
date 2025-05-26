@@ -222,10 +222,10 @@ static void s5l87xx_timer_configure_interval(enum s5l87xx_timer_id id) {
     s5l87xx_clockgate_enable(s5l87xx_timer_clockgate(id), true);
 
     volatile struct s5l87xx_timer *timer = s5l87xx_timer_registers(id);
-    /* configure timer for 100 kHz??? */
+    /* configure timer for 1000 Hz??? */
     timer->cmd = S5L87XX_TIMER_CMD_STOP;
-    timer->con = (2 << 8) | (1 << 4);
-    timer->pre = 29;
+    timer->con = (3 << 8) | (1 << 4);
+    timer->pre = 511;
     timer->data0 = 0xffff;
     timer->data1 = 0xffff;
     timer->cmd = S5L87XX_TIMER_CMD_CLR;

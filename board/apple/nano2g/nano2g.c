@@ -32,6 +32,7 @@ void reset_cpu(void)
 
 ulong get_tbclk(void)
 {
-    // Corresponds to timer setup from s5l87xx.c. ???
-    return 100000;
+    // Corresponds to timer setup from s5l87xx.c.
+    // Is this correct?
+    return 1416;
 }

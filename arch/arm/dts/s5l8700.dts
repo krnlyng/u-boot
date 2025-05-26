@@ -23,7 +23,7 @@
 
     memory {
         device_type = "memory";
-        reg = <0x08000000 0x04000000>;
+        reg = <0x08000000 0x02000000>;
     };
 
 
@@ -48,8 +48,22 @@
     };
 
     lcdcon: lcdcon@38600000 {
-        compatible = "samsung,s5l8700-lcdcon";
+        compatible = "samsung,s5l8730-lcdcon";
         reg = <0x38600000 0x10000>;
+    };
+
+    irqs: interrupt-controller@39c00000 {
+        compatible = "samsung,s5l8700-irq";
+        interrupt-controller;
+        reg = <0x39c00000 0x1000>;
+        #interrupt-cells = <1>;
+    };
+
+    timer0: timer@3c700020 {
+        compatible = "samsung,s5l87xx-pwm";
+        reg = <0x3c700000 0x20000>;
+        interrupt-parent = <&irqs>;
+        interrupts = <5>;
     };
 
     clkref: clock-ref {

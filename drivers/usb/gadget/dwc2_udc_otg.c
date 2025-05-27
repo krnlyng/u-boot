@@ -193,10 +193,6 @@ static void udc_reinit(struct dwc2_udc *dev)
 
 	debug_cond(DEBUG_SETUP != 0, "%s: %p\n", __func__, dev);
 
-#define INTMSK (*((uint32_t volatile*)(0x39C00008)))
-#define IRQ_USB_FUNC 16
-    INTMSK |= 1 << IRQ_USB_FUNC;
-
 	/* device/ep0 records init */
 	INIT_LIST_HEAD(&dev->gadget.ep_list);
 	INIT_LIST_HEAD(&dev->gadget.ep0->ep_list);
@@ -281,6 +277,10 @@ int usb_gadget_register_driver(struct usb_gadget_driver *driver)
 
 	enable_irq(IRQ_OTG);
 
+#define INTMSK (*((uint32_t volatile*)(0x39C00008)))
+#define IRQ_USB_FUNC 16
+    INTMSK |= 1 << IRQ_USB_FUNC;
+
 	debug_cond(DEBUG_SETUP != 0,
 		   "Registered gadget driver %s\n", dev->gadget.name);
 	udc_enable(dev);
@@ -309,6 +309,10 @@ int usb_gadget_unregister_driver(struct usb_gadget_driver *driver)
 	driver->unbind(&dev->gadget);
 
 	disable_irq(IRQ_OTG);
+
+#define INTMSK (*((uint32_t volatile*)(0x39C00008)))
+#define IRQ_USB_FUNC 16
+    INTMSK &= ~(1 << IRQ_USB_FUNC);
 
 	udc_disable(dev);
 	return 0;

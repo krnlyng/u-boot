@@ -69,7 +69,7 @@
     clkref: clock-ref {
         compatible = "fixed-clock";
         #clock-cells = <0>;
-        clock-frequency = <140000000>;
+        clock-frequency = <30000000>;
         clock-output-names = "clkref";
         u-boot,dm-pre-reloc;
     };
@@ -93,13 +93,15 @@
     usbotg_hs: usb@38800000 {
         compatible = "apple,ipodnano2g-usb";
         reg = <0x38800000 0x40000>;
+        interrupt-parent = <&irqs>;
+        interrupts = <16>;
         phys = <&usbphy>;
         phy-names = "usb2-phy";
         clocks = <&clkref>;
         clock-names = "otg";
         g-rx-fifo-size = <256>;
         g-np-tx-fifo-size = <32>;
-        g-tx-fifo-size = <256 256 512 512 512 768 768>;
+        g-tx-fifo-size = <256>;
         status = "okay";
         dr_mode = "peripheral";
     };

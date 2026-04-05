@@ -50,6 +50,8 @@
     lcdcon: lcdcon@38600000 {
         compatible = "samsung,s5l8730-lcdcon";
         reg = <0x38600000 0x10000>;
+        interrupt-parent = <&irqs>;
+        interrupts = <10>;
     };
 
     irqs: interrupt-controller@39c00000 {
@@ -57,6 +59,13 @@
         interrupt-controller;
         reg = <0x39c00000 0x1000>;
         #interrupt-cells = <1>;
+    };
+
+    wheel: wheel@3c200000 {
+        compatible = "apple,wheel";
+        reg = <0x3c200000 0x10000>;
+        interrupt-parent = <&irqs>;
+        interrupts = <26>;
     };
 
     timer0: timer@3c700020 {

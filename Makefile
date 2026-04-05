@@ -1201,14 +1201,14 @@ endif
 u-boot.bin: u-boot-fit-dtb.bin FORCE
 	$(call if_changed,copy)
 
-dtb-linux: dts/dt.dtb ../linux/mImage FORCE
+dtb-linux: dts/dt.dtb ../linux-up/mImage FORCE
 	$(call if_changed,cat)
 
 u-boot-dtb.bin: u-boot-nodtb.bin dtb-linux FORCE
 	$(call if_changed,cat)
 
 else ifeq ($(CONFIG_OF_SEPARATE).$(CONFIG_OF_OMIT_DTB),y.)
-dtb-linux: dts/dt.dtb ../linux/mImage FORCE
+dtb-linux: dts/dt.dtb ../linux-up/mImage FORCE
 	$(call if_changed,cat)
 
 u-boot-dtb.bin: u-boot-nodtb.bin dtb-linux FORCE
